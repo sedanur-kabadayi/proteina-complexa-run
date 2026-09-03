@@ -1,7 +1,6 @@
 # OC43 RdRp binder design —  runbook
 
 Everything below were the issues I faced..🫠
-<img width="40" height="38" alt="image" src="https://github.com/user-attachments/assets/f086fa96-dc5c-425a-a8c0-d64269e8450c" />
 
 !! Read the **Gotchas** section before changing anything
 
