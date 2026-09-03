@@ -1,6 +1,6 @@
 # OC43 RdRp binder design —  runbook
 
-Everything below were the issues I faced..🫠
+Everything below was put together after a few unexpected adventures with the proteina-complexa...🫠
 
 !! Read the **Gotchas** section before changing anything
 
