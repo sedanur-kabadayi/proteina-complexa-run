@@ -71,3 +71,5 @@ print('min_ipAE mean:', round(df['self_complex_min_ipAE'].mean(),3))
   ++seed=7
   ++metric.binder_folding_method=colabdesign \
   ++metric.num_redesign_seqs=4
+
+#change the seed after each batch run, change the run_name, but do not change the generation.task_name, use nsamples to increase or decrease the number of output
