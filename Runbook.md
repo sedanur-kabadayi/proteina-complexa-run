@@ -18,7 +18,7 @@ To change which cards are used, edit that line. Then **match the job count** to
 the number of GPUs in every run command:
 
 ```
-++gen_njobs=4 ++eval_njobs=4      # 4 GPUs listed above
+++gen_njobs=4 ++eval_njobs=4      # 4 GPUs listed 
 ```
 
 If `njobs` > number of GPUs the jobs fight over cards and slow down. If
