@@ -243,17 +243,106 @@ python3 check_contact.py "$DIR"
 
 ## 7. Pooling batches and picking candidates
 
-`pool_runs.py` merges several runs, computes contact, ranks by pLDDT then
-min_ipAE, and writes `engaged_candidates.txt` (>=4/5) and
-`shortlist_candidates.txt` (5/5 with good metrics). Add each new run to the
-`RUNS` dict at the top.
+Merges several runs, computes contact, ranks by pLDDT then min_ipAE, and writes 
+engaged_candidates.txt (>=4/5) and shortlist_candidates.txt (5/5 with good metrics).
 
-Collect and download:
+**Add each new run to the RUNS dict at the top.**
 
 ```bash
-mkdir -p candidates
-while IFS= read -r p; do cp "$p" candidates/; done < shortlist_candidates.txt
-tar czf candidates.tar.gz candidates/*.pdb     # zip is not installed on this box
+cat > pool_runs.py << 'PYEOF'
+import glob, os, shutil, collections
+import numpy as np, pandas as pd
+
+ROOT = "evaluation_results/search_binder_local_pipeline_oc43_palmcore_ext_v2_oc43_palmcore_ext_v2_"
+RUNS = ["full", "full2", "full3"]          # add each new batch here
+HOT = [110, 113, 114, 118, 119]            # A570/573/574/578/579 in the A461-928 crop
+MIN_CONTACT, MIN_PLDDT, MAX_IPAE = 4, 0.83, 0.15
+OUT = "shortlist"
+
+def contact(pdb):
+    t, b = {}, []
+    for l in open(pdb):
+        if l[:4] == "ATOM" and l[12:16].strip() == "CA":
+            x = (float(l[30:38]), float(l[38:46]), float(l[46:54]))
+            (t.__setitem__(int(l[22:26]), x) if l[21] == "A" else
+             b.append(x) if l[21] == "B" else None)
+    if not b: return None
+    hs = np.array([t[h] for h in HOT if h in t])
+    d = np.sqrt(((hs[:, None] - np.array(b)[None]) ** 2).sum(-1)).min(1)
+    return int((d < 8).sum()), round(float(d.min()), 2), len(b)
+
+rows = []
+for run in RUNS:
+    base = ROOT + run
+    bf = glob.glob(f"{base}/binder_results_*.csv")
+    if not bf:
+        print(f"  ! {run} missing"); continue
+    df = pd.concat(map(pd.read_csv, bf))
+    df["id"] = df.pdb_path.str.split("/").str[-2]
+    mf = glob.glob(f"{base}/monomer_results_*.csv")
+    seq = {}
+    if mf:
+        m = pd.concat(map(pd.read_csv, mf))
+        seq = dict(zip(m.pdb_path.str.split("/").str[-2], m._res_mpnn_best_sequence))
+    for r in df.itertuples():
+        p = glob.glob(f"{base}/{r.id}/AF2/*_self_seq_0_model1.pdb")
+        c = contact(p[0]) if p else None
+        if not c: continue
+        rows.append(dict(design_id=r.id, run=run, contact=c[0], min_hs_dist=c[1],
+                         binder_len=c[2], pLDDT=r.self_complex_pLDDT,
+                         min_ipAE=r.self_complex_min_ipAE,
+                         sequence=seq.get(r.id, ""), pdb=p[0]))
+    print(f"  {run}: {sum(x['run'] == run for x in rows)} designs")
+
+res = pd.DataFrame(rows).sort_values(["pLDDT", "min_ipAE"], ascending=[False, True])
+res.to_csv("pooled_designs.csv", index=False)
+print(f"\npooled {len(res)} -> pooled_designs.csv")
+print("contact:", dict(sorted(collections.Counter(res.contact).items())))
+
+short = res[(res.contact >= MIN_CONTACT) & (res.pLDDT >= MIN_PLDDT) &
+            (res.min_ipAE <= MAX_IPAE)].copy()
+print(f"\nshortlist (>={MIN_CONTACT}/5, pLDDT>={MIN_PLDDT}, ipAE<={MAX_IPAE}): "
+      f"{len(short)}   unique seqs: {short.sequence.nunique()}   "
+      f"lengths: {sorted(set(short.binder_len))}")
+if not len(short):
+    raise SystemExit("  empty -- loosen the thresholds at the top")
+
+shutil.rmtree(OUT, ignore_errors=True); os.makedirs(OUT)
+short["pdb_file"] = [f"cand{i:02d}_{r.run}_{os.path.basename(r.pdb)}"
+                     for i, r in enumerate(short.itertuples(), 1)]
+for r in short.itertuples():
+    shutil.copy(r.pdb, f"{OUT}/{r.pdb_file}")
+short.drop(columns="pdb").to_csv(f"{OUT}/candidates.csv", index=False)
+
+print(short[["run", "contact", "pLDDT", "min_ipAE", "min_hs_dist",
+             "binder_len"]].to_string(index=False))
+print(f"\n-> {OUT}/ : {len(short)} PDBs + candidates.csv")
+PYEOF
+
+python3 pool_runs.py
+```
+This writes: 
+1. `pooled_designs.csv` - every design from every batch, with contact count, nearest-hotspot distance,
+   binder length, pLDDT, min_ipAE and sequence.
+2. `shortlist/` - the PDBs that pass all thresholds, renamed `cand01_...` in rank order with the batch
+   name embedded, plus `candidates.csv` holding design_id, run, binder length, contact count,
+   nearest-hotspot distance, pLDDT, min_ipAE, the ProteinMPNN sequence, and the filename in that folder.
+
+`candidates.csv` contains **every design** that passes, not just the ones printed to screen.
+
+Thresholds are the three constants on one line near the top. `MIN_CONTACT = 4` is the default. 
+
+If the shortlist comes back empty the script exits with a message loosen `MIN_PLDDT` or `MAX_IPAE`.
+
+Check the `unique seqs` and `lengths` numbers it prints. It might come from a single beam lineage,
+so sequence diversity matters more than the raw count.
+
+`shortlist/` is deleted and rebuilt on every run, so rerunning after adding a batch is safe.
+
+Download it:
+
+```
+tar czf shortlist.tar.gz shortlist/
 ```
 
 ---
