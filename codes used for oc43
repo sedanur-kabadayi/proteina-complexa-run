@@ -1,5 +1,16 @@
+
+# Environment / GPUs
+
+#GPU allocation is pinned inside run_env.sh 
+
+grep -n "CUDA_VISIBLE_DEVICES" run_env.sh
+
+#To change, edit that line. Then also match the job count to the number of GPUs in every run command ++gen_njobs=4 ++eval_njobs=4
+#4 GPUs listed
+
+
 """ 
-First prepare the .pdb file -> ~/proteina-complexa/Proteina-Complexa/data
+Prepare the .pdb file -> ~/proteina-complexa/Proteina-Complexa/data
 
 Prepare yout target config and add into configs/targets/targets_dict.yaml
 """
@@ -16,7 +27,7 @@ cat >> configs/targets/targets_dict.yaml << 'YAMLEOF'
     pdb_id: oc43
 YAMLEOF
 
-grep -A 8 "oc43_palmcore:" configs/targets/targets_dict.yaml
+grep -A 8 "oc43_palmcore_ext_v2:" configs/targets/targets_dict.yaml
 
 #validation before pilot run: 
 #we don't need pilot run as we already optimized, but it is needed if you want to change the binder length, hotspot residues, target crop etc. just to confirm it is working
@@ -68,7 +79,7 @@ print('min_ipAE mean:', round(df['self_complex_min_ipAE'].mean(),3))
   ++generation.search.beam_search.n_branch=4 \
   ++gen_njobs=4 \
   ++eval_njobs=4 \
-  ++seed=7
+  ++seed=7 \
   ++metric.binder_folding_method=colabdesign \
   ++metric.num_redesign_seqs=4
 
